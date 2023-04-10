@@ -15,8 +15,6 @@ export const googleTool = new DynamicTool({
       },
     });
 
-    console.log({ googleResponse: response });
-
     return JSON.stringify({
       results: response.results,
       featured: response.featured_snippet,

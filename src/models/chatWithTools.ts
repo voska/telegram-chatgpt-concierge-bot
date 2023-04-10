@@ -27,12 +27,15 @@ import {
   AgentFinish,
   BaseChatMessage,
   HumanChatMessage,
+  ChatMessage,
 } from "langchain/schema";
-import { BufferMemory } from "langchain/memory";
+import { BufferMemory  } from "langchain/memory";
 import { ConversationChain } from "langchain/chains";
 import { Configuration } from "openai";
 import { OpenAIApi } from "openai";
 import { googleTool } from "./tools/google";
+import { Message } from "telegraf/typings/core/types/typegram";
+import { MemoryVariables, OutputValues } from "langchain/dist/memory/base";
 
 const openAIApiKey = process.env.OPENAI_API_KEY!;
 
@@ -63,8 +66,59 @@ Thought: I now know the final answer
 Final Answer: the final answer to the original input question`;
 const SUFFIX = `Begin!
 
+{chat_history}
 Question: {input}
 Thought:{agent_scratchpad}`;
+
+class CustomMemory extends BufferMemory {
+  constructor() {
+    super({ memoryKey: "chat_history" });
+  }
+
+  getBufferString = function(
+    messages: BaseChatMessage[],
+    human_prefix = "Human",
+    ai_prefix = "AI"
+  ): string {
+    const string_messages: string[] = [];
+    for (const m of messages) {
+      let role: string;
+      if (m._getType() === "human") {
+        role = human_prefix;
+      } else if (m._getType() === "ai") {
+        role = ai_prefix;
+      } else if (m._getType() === "system") {
+        role = "System";
+      } else if (m._getType() === "generic") {
+        role = (m as ChatMessage).role;
+      } else {
+        throw new Error(`Got unsupported message type: ${m}`);
+      }
+      string_messages.push(`${role}: ${m.text}`);
+    }
+    return string_messages.join("\n");
+  }
+  async loadMemoryVariables(_values: InputValues): Promise<MemoryVariables> {
+
+    const result = {
+      [this.memoryKey]: this.getBufferString(this.chatHistory.messages)
+    };
+    console.log('CURRENT CACHE RESULT ', this.memoryKey,result[this.memoryKey])
+    return result;
+
+
+    return result;
+  }
+  async saveContext(
+    inputValues: InputValues,
+    outputValues: OutputValues
+  ): Promise<void> {
+      console.log("SAVING CONTEXT ", inputValues.input, outputValues.text )
+    inputValues.input && this.chatHistory.addUserMessage(inputValues.input)
+    outputValues.text && this.chatHistory.addAIChatMessage(outputValues.text)
+
+  }
+}
 
 class CustomPromptTemplate extends BaseChatPromptTemplate {
   tools: Tool[];
@@ -120,11 +174,7 @@ class CustomOutputParser extends AgentActionOutputParser {
 
     const match = /Action: (.*)\nAction Input: (.*)/s.exec(text);
     if (!match) {
-      return {
-        tool: 'None',
-        toolInput: 'None',
-        log: text + " Final Answer:",
-      };
+      return { log: text, returnValues: { output: "How can I help you?" } };
     }
 
     return {
@@ -150,13 +200,14 @@ export class Model {
 
   constructor() {
    
-
+    
 
   }
 
-  public async call(input: string) {
-    await this._init()
-
+  public async call(input: string, ctx: any) {
+    if (this.executor == undefined)
+      await this._init()
+    
     
     console.log(input);
     const response = await this.executor!.call({ input });
@@ -178,9 +229,10 @@ export class Model {
     const llmChain = new LLMChain({
       prompt: new CustomPromptTemplate({
         tools,
-        inputVariables: ["input", "agent_scratchpad"],
+        inputVariables: ["input", "agent_scratchpad","chat_history"],
       }),
       llm: model,
+      memory: new CustomMemory(),
     });
   
     const agent = new LLMSingleActionAgent({
@@ -192,7 +244,7 @@ export class Model {
     this.executor = new AgentExecutor({
       agent,
       tools,
-      verbose: true
+      verbose: false
     });
 
     
