@@ -13,7 +13,6 @@ import { OpenAIApi } from "openai";
 import { googleTool } from "./tools/google";
 
 const openAIApiKey = process.env.OPENAI_API_KEY!;
-const botName = process.env.BOT_NAME || 'AI';
 
 const params = {
   verbose: true,
