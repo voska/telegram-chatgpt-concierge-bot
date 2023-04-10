@@ -38,7 +38,7 @@ bot.on("voice", async (ctx) => {
   await ctx.sendChatAction("typing");
 
   const localFilePath = await downloadVoiceFile(workDir, voice.file_id, bot);
-  const transcription = await postToWhisper(model.openai, localFilePath);
+  const transcription = await postToWhisper(localFilePath);
 
   await ctx.reply(`Transcription: ${transcription}`);
   await ctx.sendChatAction("typing");
