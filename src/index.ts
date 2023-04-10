@@ -23,14 +23,17 @@ if (!existsSync(workDir)) {
 healthcheck();
 
 bot.start((ctx) => {
+  console.log(ctx);
   ctx.reply("Welcome to my Telegram bot!");
 });
 
 bot.help((ctx) => {
+  console.log(ctx);
   ctx.reply("Send me a message and I will echo it back to you.");
 });
 
 bot.on("voice", async (ctx) => {
+  console.log(ctx);
   const voice = ctx.message.voice;
   await ctx.sendChatAction("typing");
 
@@ -56,6 +59,7 @@ bot.on("voice", async (ctx) => {
 });
 
 bot.on("message", async (ctx) => {
+  console.log(ctx);
   const text = (ctx.message as any).text;
 
   if (!text) {
