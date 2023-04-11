@@ -8,7 +8,7 @@ export class GoogleTool extends DynamicTool {
 
   constructor(llm: ChatOpenAI) {
     super({
-      name: "Google Search Tool",
+      name: "GoogleSearch",
       description:
         "This is Google. Use this tool to search the internet. Input should be a string",
       func: async (searchPhrase: string) => {
