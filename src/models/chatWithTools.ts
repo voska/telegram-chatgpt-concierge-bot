@@ -33,7 +33,7 @@ import { BufferMemory  } from "langchain/memory";
 import { ConversationChain } from "langchain/chains";
 import { Configuration } from "openai";
 import { OpenAIApi } from "openai";
-import { googleTool } from "./tools/google";
+import { GoogleTool } from "./tools/google";
 import { Message } from "telegraf/typings/core/types/typegram";
 import { MemoryVariables, OutputValues } from "langchain/dist/memory/base";
 
@@ -63,7 +63,7 @@ Action Input: the input to the action
 Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: the final answer to the original input question`;
+Final Answer: the final answer to the original input question, always answer in english`;
 const SUFFIX = `Begin!
 
 {chat_history}
@@ -103,7 +103,7 @@ class CustomMemory extends BufferMemory {
     const result = {
       [this.memoryKey]: this.getBufferString(this.chatHistory.messages)
     };
-    console.log('CURRENT CACHE RESULT ', this.memoryKey,result[this.memoryKey])
+    
     return result;
 
 
@@ -113,7 +113,7 @@ class CustomMemory extends BufferMemory {
     inputValues: InputValues,
     outputValues: OutputValues
   ): Promise<void> {
-      console.log("SAVING CONTEXT ", inputValues.input, outputValues.text )
+     
     inputValues.input && this.chatHistory.addUserMessage(inputValues.input)
     outputValues.text && this.chatHistory.addAIChatMessage(outputValues.text)
 
@@ -151,6 +151,7 @@ class CustomPromptTemplate extends BaseChatPromptTemplate {
     const newInput = { agent_scratchpad: agentScratchpad, ...values };
     /** Format the template. */
     const formatted = renderTemplate(template, "f-string", newInput);
+    console.log(formatted)
     return [new HumanChatMessage(formatted)];
   }
 
@@ -209,21 +210,22 @@ export class Model {
       await this._init()
     
     
-    console.log(input);
+
     const response = await this.executor!.call({ input });
 
-    console.log(response);
+
 
     return response.output;
   }
 
   async  _init() {
 
-    let tools = [googleTool,  new Calculator()];
     const configuration = new Configuration({
       apiKey: openAIApiKey,
     });
     let model = new ChatOpenAI(params, configuration);
+
+    let tools = [new GoogleTool(model),  new Calculator()];
 
 
     const llmChain = new LLMChain({

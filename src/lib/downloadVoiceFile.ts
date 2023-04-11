@@ -1,5 +1,6 @@
 import { createWriteStream } from "fs";
 import ffmpeg from "fluent-ffmpeg";
+const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
 import { Telegraf } from "telegraf";
 import axios from "axios";
 
@@ -26,6 +27,7 @@ export async function downloadVoiceFile(
   });
 
   await new Promise((resolve) => {
+    ffmpeg.setFfmpegPath(ffmpegInstaller.path);
     ffmpeg(oggDestination)
       .format("mp3")
       .on("error", console.error)
