@@ -324,7 +324,7 @@ export class Model {
         const answer = parts[parts.length - 1].trim();
         this.memory.chatHistory.addAIChatMessage(answer)
         return answer
-      }
+      } 
   
       if (text.indexOf('Action:') && text.indexOf('Action Input:') ) {
         let regex = /^Action:(.*)$/m;
