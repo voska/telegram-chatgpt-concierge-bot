@@ -257,12 +257,20 @@ export class Model {
       case "STATEMENT": 
         this.memory.chatHistory.addUserMessage(input)
       case "OTHER":
-        return await this.invokeLLM(input,`${this.systemState}\n${await this.memory.returnCurrentStackAsString()}\nYou are ROBORTA, a helpful and factual chat bot, address yourself as female if needed`)
+        return await this.invokeLLM(input,
+`${this.systemState}\n
+You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
+This was our conversation so far: ${await this.memory.returnCurrentStackAsString()}
+Human: `
+        )
 
       case "TASK": 
       case "QUESTION":
+        let text = await this.invokeAgent(input)
         this.memory.chatHistory.addUserMessage(input)
-        return await this.invokeAgent(input)
+        this.memory.chatHistory.addAIChatMessage(text)
+        return text
+
     }
 
     const response = await this.executor!.call({ input });
@@ -281,50 +289,56 @@ export class Model {
 
     
 
-    let zeroshot = await this.invokeLLM(input, `${this.systemState}\n${await this.memory.returnCurrentStackAsString()}\nYou are ROBORTA, a cautious assistant. address yourself as female if prompted. 
+    let zeroshot = await this.invokeLLM(input, 
+`${this.systemState}
+You are ROBORTA, a cautious assistant. address yourself as female if prompted. 
+This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
 
-    answer using either
-    UNSURE
-    or 
-    Final answer: the answer for the user
+answer using either
+UNSURE: why are you unsure
+or 
+Final answer: the answer for the user
     
-    Try to answer the following question:
-    `)
+Try to answer the following question:
+`)
     if (zeroshot.startsWith('Final answer: ')){
       zeroshot = zeroshot.replace('Final answer: ','')
-      this.memory.chatHistory.addAIChatMessage(zeroshot)
       return zeroshot
     }
-    let scratchpad = []
+    let scratchpad =   ['']
 
 
-    let prompt = `${this.systemState}You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
-    You have access to the following tools:
-    
-    ${toolStrings}
+    let prompt = `${this.systemState}
+You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
 
-    Always use the following format:
+This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
+  
+You have access to the following tools:
     
-    Observations: other facts gathered so far
+${toolStrings}
 
-    Questions: the sentence you must reply
+Always use the following format:
     
-    Thought: always think what information to look  up to reply to the user, pick the information that has the least uncertainty
-    Action: one action to take, should be one of [${toolNames}]
-    Action Input: the input to the action
-    Observations: the result of the action
-    ... (this Thought/Action/Action Input/Observation can repeat N times)
-    Thought: I now know the final answer
-    Final Answer: the final answer to the original input question, always answer in english
-    
-    Begin!
-    
-    Observation: ${await this.memory.returnCurrentStackAsString()}
-    
-    Questions: 
-    
+Observations: other facts gathered so far
 
-    `
+Questions: the sentence you must reply
+    
+Thought: always think what information to look  up to reply to the user, pick the information that has the least uncertainty
+Action: one action to take, should be one of [${toolNames}]
+Action Input: the input to the action
+Observations: the result of the action
+... (this Thought/Action/Action Input/Observation can repeat N times)
+Thought: I now know the final answer
+Final Answer: the final answer to the original input question, always answer in english
+
+Begin!
+    
+Observation: 
+
+Question: 
+
+
+`
 
     for (let i=0; i< 10; i++) {
       let text = (await this.invokeLLM(input, prompt))
@@ -355,8 +369,9 @@ export class Model {
         
         console.log('OBSERVATION: ',observation) 
 
-        prompt = prompt + input 
-        input = '\nObservation: ' + observation
+        input = input + '\n' + text.replace(/(Action Input:([^\n\r]*)).*/s,'$1') + '\nObservation: ' + observation
+
+        console.log('TWEAKED INPUT AT ITERATION : ',i,input) 
 
         continue
       }
@@ -364,7 +379,6 @@ export class Model {
       if (text.includes("Final Answer:")) {
         const parts = text.split("Final Answer:");
         const answer = parts[parts.length - 1].trim();
-        this.memory.chatHistory.addAIChatMessage(answer)
         return answer
       } 
 
