@@ -137,7 +137,6 @@ export class Model {
   public model_premium = new ChatOpenAI(premium_params, configuration);;
   public memory = new CustomMemory()
   systemState: string | undefined;
-  tools = [new GoogleTool(this.model),  new CalculatorTool(this.model), new WikipediaTool(this.model)];
   constructor() {
 
     
@@ -206,10 +205,11 @@ Human: `
     }
   }
   async invokeAgent(input: string) {
-    const toolStrings = this.tools!
+    let tools =  [new GoogleTool(this.model, input),  new CalculatorTool(this.model, input), new WikipediaTool(this.model, input)];
+    const toolStrings = tools!
     .map((tool) => `${tool.name}: ${tool.description}`)
     .join("\n");
-    const toolNames = this.tools!.map((tool) => tool.name).join("\n");
+    const toolNames = tools!.map((tool) => tool.name).join("\n");
 
 
 
@@ -229,7 +229,9 @@ This was our conversation so far:\n${await this.memory.returnCurrentStackAsStrin
 Try to answer the following question:
 `, true)
     if (zeroshot && zeroshot.startsWith('Final answer: ')){
+      
       zeroshot = zeroshot.replace('Final answer: ','')
+      console.log("Found an answer: " + zeroshot)
       return zeroshot
     }
     console.log("MODEL UNSURE, STARTING LOOP")
@@ -239,18 +241,12 @@ Try to answer the following question:
 
     let prompt = `${this.systemState}
 You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
-
-
-This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
-  
-  
-This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
   
 You have access to the following tools:
     
 ${toolStrings}
 
-Use the following format:
+Use the following format (action and action input are useful only to retrieve facts that you don't already know):
 
 Question: the input question you must answer
 Thought: you should always think about what to do
@@ -271,7 +267,8 @@ ${history}
 `
 
 
-
+console.log(prompt)
+console.log(input)
 
 
     for (let i=0; i< 10; i++) {
@@ -286,13 +283,13 @@ ${history}
         match = text.match(regex);
         let toolInput = match ? match![1].trim() : undefined;
         let observation = `asking ${toolName} for ${toolInput} didn't provide any insight`
-        console.log('TOOL: ',toolName,toolInput) 
+
         if (toolName && toolInput) {
-          for (let t of this.tools!) {
+          for (let t of tools!) {
             if (t.name == toolName) {
               try {
               observation = await t.call(toolInput!)
-              console.log('TOOL: ',toolName,toolInput, "->",observation) 
+
               } catch (e) {
                 console.log(e)
               }
@@ -302,17 +299,17 @@ ${history}
           
         }
         
-        console.log('OBSERVATION: ',observation) 
-
-        input = input + '\n' + text.replace(/(Action Input:([^\n\r]*)).*/s,'$1') + '\nObservation: ' + observation
-
-        console.log('TWEAKED INPUT AT ITERATION : ',i,input) 
+        let delta = '\n' + text.replace(/(Action Input:([^\n\r]*)).*/s,'$1') + '\nObservation: ' + observation
+        input = input + delta
+        console.log(delta)
+        
 
         continue
       }
 
       if (text.includes("Final Answer:")) {
         const parts = text.split("Final Answer:");
+        console.log(text)
         const answer = parts[parts.length - 1].trim();
         return answer
       } 
@@ -336,7 +333,7 @@ ${history}
         input
       ),
       ])).text
-      console.log("\n\n\nINVOKING ", prompt, "\nINPUT ",input,"\nANSWER", t, "\nEND\n\n");
+      
     return t
   }
 

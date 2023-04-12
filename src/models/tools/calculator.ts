@@ -7,7 +7,7 @@ import { HumanChatMessage, SystemChatMessage } from "langchain/schema";
 
 export class CalculatorTool extends DynamicTool {
 
-  constructor(llm: ChatOpenAI) {
+  constructor(llm: ChatOpenAI, question: string) {
     super({
       name: "Calculator",
       description:

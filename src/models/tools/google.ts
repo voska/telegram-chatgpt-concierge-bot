@@ -6,7 +6,7 @@ import { HumanChatMessage, SystemChatMessage } from "langchain/schema";
 
 export class GoogleTool extends DynamicTool {
 
-  constructor(llm: ChatOpenAI) {
+  constructor(llm: ChatOpenAI, question: string) {
     super({
       name: "Google",
       description:
@@ -24,7 +24,7 @@ export class GoogleTool extends DynamicTool {
 
         const cr = await llm.call([
           new SystemChatMessage(
-            "extract all entities and relationships relevant to this query:  " + searchPhrase 
+            "answer these questions:  \n- " + question + '\n- ' + searchPhrase  +"\nfrom this text: "
           ),
           new HumanChatMessage(
             JSON.stringify({

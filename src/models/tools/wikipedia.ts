@@ -8,7 +8,7 @@ import { Document } from "langchain/document";
 
 export class WikipediaTool extends DynamicTool {
 
-  constructor(llm: ChatOpenAI) {
+  constructor(llm: ChatOpenAI, question: string) {
     super({
       name: "Wikipedia",
       description:
@@ -27,18 +27,18 @@ export class WikipediaTool extends DynamicTool {
                 searchResults
             ),
           ])).text;
-          console.log(ps)
+
           if (ps.startsWith('Page Title: ')){
             ps = ps.replace('Page Title: ','') 
             
             searchResults = JSON.stringify(await (await wiki().page(ps)).content())
-            console.log('Page Content: '+searchResults)
+          
 
           }
           
           const cr = await llm.call([
             new SystemChatMessage(
-              "extract all entities and relationships relevant to this query:  " + searchPhrase 
+              "extract entities related to these questions:  \n- " + question + '\n- ' + searchPhrase  +"\nfrom this text: "
             ),
             new HumanChatMessage(
               searchResults
