@@ -193,9 +193,13 @@ Human: `
       case "TASK": 
       case "QUESTION":
         let text = await this.invokeAgent(input)
+        if (text) {
         this.memory.chatHistory.addUserMessage(input)
         this.memory.chatHistory.addAIChatMessage(text)
         return text
+        }
+        else return "I'm having difficulties answering right now."
+        
 
     }
 
