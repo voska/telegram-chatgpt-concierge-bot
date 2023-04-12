@@ -69,9 +69,9 @@ Final Answer: the question
 `;
 const SUFFIX = `Scenario:
 
-{chat_history}
-
 {input}
+
+Observe: {chat_history}
 
 {agent_scratchpad}`;
 
@@ -297,43 +297,48 @@ export class Model {
     }
     let scratchpad = []
 
+
+    let prompt = `${this.systemState}You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
+    You have access to the following tools:
+    
+    ${toolStrings}
+
+    Always use the following format:
+    
+    Observations: other facts gathered so far
+
+    Questions: the sentence you must reply
+    
+    Thought: always think what information to look  up to reply to the user, pick the information that has the least uncertainty
+    Action: one action to take, should be one of [${toolNames}]
+    Action Input: the input to the action
+    Observations: the result of the action
+    ... (this Thought/Action/Action Input/Observation can repeat N times)
+    Thought: I now know the final answer
+    Final Answer: the final answer to the original input question, always answer in english
+    
+    Begin!
+    
+    Observation: ${await this.memory.returnCurrentStackAsString()}
+    
+    Questions: 
+    
+
+    `
+
     for (let i=0; i< 10; i++) {
-      let text = (await this.invokeLLM(input, `${this.systemState}\n${await this.memory.returnCurrentStackAsString()}\nYou are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
-      You have access to the following tools:
-      
-      ${toolStrings}
+      let text = (await this.invokeLLM(input, prompt))
 
-      Always use the following format:
-      
-      Question: the sentence you must reply
-      Thought: always think what information to look  up to reply to the user, pick the information that has the least uncertainty
-      Action: one action to take, should be one of [${toolNames}]
-      Action Input: the input to the action
-      Observation: the result of the action
-      ... (this Thought/Action/Action Input/Observation can repeat N times)
-      Thought: I now know the final answer
-      Final Answer: the final answer to the original input question, always answer in english
-      
-      Begin!
-      
-      
-      Question:`))
-
-      if (text.includes("Final Answer:")) {
-        const parts = text.split("Final Answer:");
-        const answer = parts[parts.length - 1].trim();
-        this.memory.chatHistory.addAIChatMessage(answer)
-        return answer
-      } 
   
-      if (text.indexOf('Action:') && text.indexOf('Action Input:') ) {
-        let regex = /^Action:(.*)$/m;
+      if (text.indexOf('Action:')>-1 && text.indexOf('Action Input:')>-1 ) {
+        let regex = /Action:(.*)$/m;
         let match = text.match(regex);
         let toolName = match ? match![1].trim() : undefined;
-        regex = /^Action Input:(.*)$/m;
+        regex = /Action Input:(.*)$/m;
         match = text.match(regex);
         let toolInput = match ? match![1].trim() : undefined;
         let observation = `asking ${toolName} for ${toolInput} didn't provide any insight`
+        console.log('TOOL: ',toolName,toolInput) 
         if (toolName && toolInput) {
           for (let t of this.tools!) {
             if (t.name == toolName) {
@@ -347,11 +352,21 @@ export class Model {
           }
           
         }
-        this.memory.chatHistory.addAIChatMessage('Observation: ' + observation)
+        
         console.log('OBSERVATION: ',observation) 
+
+        prompt = prompt + input 
+        input = '\nObservation: ' + observation
+
         continue
       }
 
+      if (text.includes("Final Answer:")) {
+        const parts = text.split("Final Answer:");
+        const answer = parts[parts.length - 1].trim();
+        this.memory.chatHistory.addAIChatMessage(answer)
+        return answer
+      } 
 
     }
     return await this.invokeLLM(input, `${this.systemState}\nYou are ROBORTA, a fussy assistant, address yourself as female if prompted. 
