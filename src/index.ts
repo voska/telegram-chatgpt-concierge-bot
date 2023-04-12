@@ -110,7 +110,10 @@ bot.on(message('text'), async (ctx) => {
     
     await ctx.sendChatAction("typing");
     const response =  await state.model.call(text, ctx);
-    await ctx.reply(response);
+    if (response) 
+      await ctx.reply(response);
+    else
+    await ctx.reply("Empty response from the model");
   }
 
  
