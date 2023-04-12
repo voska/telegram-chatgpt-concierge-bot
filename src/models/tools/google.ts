@@ -8,9 +8,9 @@ export class GoogleTool extends DynamicTool {
 
   constructor(llm: ChatOpenAI) {
     super({
-      name: "GoogleSearch",
+      name: "Google",
       description:
-        "This is Google. Use this tool to search the internet. Input should be a string",
+        "useful to research current events",
       func: async (searchPhrase: string) => {
         const response = await google.search(searchPhrase, {
           page: 0,
@@ -24,7 +24,7 @@ export class GoogleTool extends DynamicTool {
 
         const cr = await llm.call([
           new SystemChatMessage(
-            "Summarize the following data, extract only informations relevant to this query " + searchPhrase
+            "extract all entities and relationships relevant to this query:  " + searchPhrase 
           ),
           new HumanChatMessage(
             JSON.stringify({

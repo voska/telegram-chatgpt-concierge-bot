@@ -11,7 +11,7 @@ export class CalculatorTool extends DynamicTool {
     super({
       name: "Calculator",
       description:
-        "Useful for getting the result of a math expression. The input to this tool should be one valid mathematical expression that could be executed by a simple calculator.",
+        "useful to execute small javascript mathematical expressions",
       func: async (input: string) => {
         try {  
           const regex = /[\d+\-*/.()]+/g;

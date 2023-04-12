@@ -38,12 +38,13 @@ import { Message } from "telegraf/typings/core/types/typegram";
 import { MemoryVariables, OutputValues } from "langchain/dist/memory/base";
 import { DynamicTool } from "langchain/tools";
 import { CalculatorTool } from "./tools/calculator";
+import { WikipediaTool } from "./tools/wikipedia";
 
 const openAIApiKey = process.env.OPENAI_API_KEY!;
 
 const params = {
   verbose: true,
-  temperature: 0,
+  temperature: 1.0,
   openAIApiKey,
   modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
@@ -51,29 +52,17 @@ const params = {
   maxRetries: 5,
 };
 
+const premium_params = {
+  verbose: true,
+  temperature: 1.0,
+  openAIApiKey,
+  modelName: "gpt-4",
+  maxConcurrency: 1,
+  maxTokens: 4000,
+  maxRetries: 5,
+};
 
 
-const PREFIX = `You have access to the following tools:`;
-const formatInstructions = (toolNames: string) => `
-answer in this format:
-
-list all entities and relationship ordered 
-
-then
-
-Observe: list all the entities that need to be researched to understand the scenario
-Orient: pick the first from the list
-Action: write on a single line one of [${toolNames}] followed by : and the input for the tool in quotes
-...(loop n times until the list of entities that need to be researched is empty)
-Final Answer: the question
-`;
-const SUFFIX = `Scenario:
-
-{input}
-
-Observe: {chat_history}
-
-{agent_scratchpad}`;
 
 class CustomMemory extends BufferMemory {
   constructor() {
@@ -82,8 +71,8 @@ class CustomMemory extends BufferMemory {
 
   getBufferString = function(
     messages: BaseChatMessage[],
-    human_prefix = "Human",
-    ai_prefix = "AI"
+    human_prefix = "Me",
+    ai_prefix = "ROBORTA"
   ): string {
     const string_messages: string[] = [];
     for (const m of messages) {
@@ -133,91 +122,24 @@ class CustomMemory extends BufferMemory {
   }
 }
 
-class CustomPromptTemplate extends BaseChatPromptTemplate {
-  tools: Tool[];
-
-  constructor(args: { tools: Tool[]; inputVariables: string[] }) {
-    super({ inputVariables: args.inputVariables });
-    this.tools = args.tools;
-  }
-
-  _getPromptType(): string {
-    throw new Error("Not implemented");
-  }
-
-  async formatMessages(values: InputValues): Promise<BaseChatMessage[]> {
-    /** Construct the final template */
-    const toolStrings = this.tools
-      .map((tool) => `${tool.name}: ${tool.description}`)
-      .join("\n");
-    const toolNames = this.tools.map((tool) => tool.name).join("\n");
-    const instructions = formatInstructions(toolNames);
-    const template = [PREFIX, toolStrings, instructions, SUFFIX].join("\n\n");
-    /** Construct the agent_scratchpad */
-    const intermediateSteps = values.intermediate_steps as AgentStep[];
-    const agentScratchpad = intermediateSteps.reduce(
-      (thoughts, { action, observation }) =>
-        thoughts +
-        [action.log, `\nObservation: ${observation}`, "Thought:"].join("\n"),
-      ""
-    );
-    const newInput = { agent_scratchpad: agentScratchpad, ...values };
-    /** Format the template. */
-    const formatted = renderTemplate(template, "f-string", newInput);
-    console.log(formatted)
-    return [new HumanChatMessage(formatted)];
-  }
-
-  partial(_values: PartialValues): Promise<BasePromptTemplate> {
-    throw new Error("Not implemented");
-  }
-
-  serialize(): SerializedBasePromptTemplate {
-    throw new Error("Not implemented");
-  }
-}
-
-class CustomOutputParser extends AgentActionOutputParser {
-  async parse(text: string): Promise<AgentAction | AgentFinish> {
-    console.log(text)
-    if (text.includes("Final Answer:")) {
-      const parts = text.split("Final Answer:");
-      const input = parts[parts.length - 1].trim();
-      const finalAnswers = { output: input };
-      return { log: text, returnValues: finalAnswers };
-    }
-
-    const match = /Action: (.*): (.*)/s.exec(text);
-    if (!match) {
-      return { log: text, returnValues: { output: "How can I help you?" } };
-    }
-
-    return {
-      tool: match[1].trim(),
-      toolInput: match[2].trim().replace(/^"+|"+$/g, ""),
-      log: text,
-    };
-  }
-
-  getFormatInstructions(): string {
-    throw new Error("Not implemented");
-  }
-}
 
 
 
-
+const configuration = new Configuration({
+  apiKey: openAIApiKey, 
+});
 
 
 export class Model {
 
   public executor?: AgentExecutor;
-  public model?: ChatOpenAI;
+  public model = new ChatOpenAI(params, configuration);
+  public model_premium = new ChatOpenAI(premium_params, configuration);;
   public memory = new CustomMemory()
   systemState: string | undefined;
-  tools?: (DynamicTool )[];
+  tools = [new GoogleTool(this.model),  new CalculatorTool(this.model), new WikipediaTool(this.model)];
   constructor() {
-   
+
     
 
   }
@@ -230,20 +152,21 @@ export class Model {
     return `${yyyy}/${mm}/${dd}`;
   }
   public async call(input: string, ctx: any) {
-    if (this.executor == undefined)
-      await this._init()
-    
+
+    try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
 
-    let ask = (await this.model!.call([
+    let ask = (await this.model.call([
         new SystemChatMessage(
           `${this.systemState}Categorize the following text, use:
 
+          FORGET: this is a order to forget our conversation so far
           TASK: the text contain an instruction or a command
           QUESTION: the text is asking for some information
           STATEMENT: the text contains informations but no instructions
           
-          answer MUST be one of [TASK, QUESTION, STATEMENT, OTHER]
+
+          answer MUST be one of [FORGET, TASK, QUESTION, STATEMENT, OTHER]
 
           text: `
         ),
@@ -256,11 +179,15 @@ export class Model {
     switch(ask) {
       case "STATEMENT": 
         this.memory.chatHistory.addUserMessage(input)
+      case "FORGET":
+        this.memory = new CustomMemory();
+        return 'Alright, let me know if you need any assistance or have any questions.'
       case "OTHER":
+      deafult:
         return await this.invokeLLM(input,
 `${this.systemState}\n
 You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
-This was our conversation so far: ${await this.memory.returnCurrentStackAsString()}
+This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}
 Human: `
         )
 
@@ -273,11 +200,10 @@ Human: `
 
     }
 
-    const response = await this.executor!.call({ input });
-
-
-
-    return response.output;
+   } catch(e) {
+      console.log(e)
+      return JSON.stringify(e);
+    }
   }
   async invokeAgent(input: string) {
     const toolStrings = this.tools!
@@ -287,61 +213,69 @@ Human: `
 
 
 
-    
+    console.log("ENTERING AGENT")
 
     let zeroshot = await this.invokeLLM(input, 
 `${this.systemState}
 You are ROBORTA, a cautious assistant. address yourself as female if prompted. 
-This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
 
 answer using either
 UNSURE: why are you unsure
 or 
-Final answer: the answer for the user
-    
+Final answer: the factual answer 
+
+This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()} 
+
 Try to answer the following question:
-`)
-    if (zeroshot.startsWith('Final answer: ')){
+`, true)
+    if (zeroshot && zeroshot.startsWith('Final answer: ')){
       zeroshot = zeroshot.replace('Final answer: ','')
       return zeroshot
     }
-    let scratchpad =   ['']
+    console.log("MODEL UNSURE, STARTING LOOP")
+    let history = this.memory.chatHistory.messages.length? 
+    `This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}, the question may be related.`:``
 
 
     let prompt = `${this.systemState}
 You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
 
+
+This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
+  
+  
 This was our conversation so far: ${await this.memory.returnCurrentStackAsString()} 
   
 You have access to the following tools:
     
 ${toolStrings}
 
-Always use the following format:
-    
-Observations: other facts gathered so far
+Use the following format:
 
-Questions: the sentence you must reply
-    
-Thought: always think what information to look  up to reply to the user, pick the information that has the least uncertainty
-Action: one action to take, should be one of [${toolNames}]
+Question: the input question you must answer
+Thought: you should always think about what to do
+Action: the action to take, should be one of [${toolNames}]
 Action Input: the input to the action
-Observations: the result of the action
+Observation: the result of the action
 ... (this Thought/Action/Action Input/Observation can repeat N times)
 Thought: I now know the final answer
-Final Answer: the final answer to the original input question, always answer in english
+Final Answer: the final answer to the original input question
 
 Begin!
-    
-Observation: 
+
+
 
 Question: 
-
+${history}
 
 `
 
+
+
+
+
     for (let i=0; i< 10; i++) {
-      let text = (await this.invokeLLM(input, prompt))
+      let text = (await this.invokeLLM(input, prompt,true))
 
   
       if (text.indexOf('Action:')>-1 && text.indexOf('Action Input:')>-1 ) {
@@ -358,6 +292,7 @@ Question:
             if (t.name == toolName) {
               try {
               observation = await t.call(toolInput!)
+              console.log('TOOL: ',toolName,toolInput, "->",observation) 
               } catch (e) {
                 console.log(e)
               }
@@ -390,42 +325,8 @@ Question:
     Message:`)
   }
 
-  async  _init() {
 
-    const configuration = new Configuration({
-      apiKey: openAIApiKey, 
-    });
-    this.model = new ChatOpenAI(params, configuration);
-
-    this.tools = [new GoogleTool(this.model),  new CalculatorTool(this.model)];
-
-    
-
-    const llmChain = new LLMChain({
-      prompt: new CustomPromptTemplate({
-        tools:this.tools,
-        inputVariables: ["input", "agent_scratchpad","chat_history"],
-      }),
-      llm: this.model,
-      memory: this.memory,
-    });
-  
-    const agent = new LLMSingleActionAgent({
-      llmChain,
-      outputParser: new CustomOutputParser(),
-      stop: ["\nObservation"],
-    });
-
-    this.executor = new AgentExecutor({
-      agent,
-      tools: this.tools,
-      verbose: false
-    });
-
-    
-  }
-  
-  async invokeLLM(input: string, prompt:string) {
+  async invokeLLM(input: string, prompt:string, premium: boolean = false) {
     
     let t = (await this.model!.call([
       new SystemChatMessage(

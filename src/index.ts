@@ -85,12 +85,9 @@ const default_chat_context= function(id: any) {
     model: new ChatWithTools()
   }
 }
+
 bot.on(message('text'), async (ctx) => {
 
-  if (!(('key_'+ctx.message.chat.id) in chat_maps)) {
-    chat_maps['key_'+ctx.message.chat.id] = default_chat_context(ctx.message.chat.id)
-  }
-  const state = chat_maps['key_'+ctx.message.chat.id]
 
 
   if (!(valid_ids.includes(''+ctx.update.message.from.id))) {
@@ -98,6 +95,11 @@ bot.on(message('text'), async (ctx) => {
     console.log('ACCESS ATTEMPT BY '+ ctx.update.message.from.id)
     await ctx.reply(response);
   } else {
+    if (!(('key_'+ctx.message.chat.id) in chat_maps)) {
+      chat_maps['key_'+ctx.message.chat.id] = default_chat_context(ctx.message.chat.id)
+    }
+    const state = chat_maps['key_'+ctx.message.chat.id]
+  
     const text = (ctx.message as any).text;
 
     if (!text) {
