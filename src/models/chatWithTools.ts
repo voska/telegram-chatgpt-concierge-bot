@@ -212,7 +212,7 @@ Human: `
     }
   }
   async invokeAgent(input: string) {
-    let tools =  [new GoogleTool(this.model, input),  new CalculatorTool(this.model, input), new WikipediaTool(this.model, input)];
+    let tools =  [new GoogleTool(this.model, input), new WikipediaTool(this.model, input)];
     const toolStrings = tools!
     .map((tool) => `${tool.name}: ${tool.description}`)
     .join("\n");
@@ -245,55 +245,12 @@ Final Answer: the final answer to the original input question
 
 Begin!
 
-
+${history}
 
 Question: 
-${history}
+
 
 `
-    let zeroshot = await this.invokeLLM(input, 
-      prompt, false)
-    if (zeroshot && zeroshot.indexOf('Final answer: ')>-1){
-      let check = await this.invokeLLM("is this the correct answer?", 
-      prompt + input + '\n'+zeroshot, true)
-        if (check.toLowerCase().indexOf('no')==-1) {
-        zeroshot = zeroshot.replace(/.*Final answer: /s,'')
-        console.log("Found an answer: " + zeroshot)
-        return zeroshot
-      }
-    }
-    console.log("MODEL UNSURE, STARTING LOOP")
-    
-/*
-prompt = 
-`${this.systemState}
-You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
-
-You have access to the following tools:
-
-${toolStrings}
-
-answer in this format:
-
-list all entities and relationship ordered 
-
-then
-
-Observe: list all the entities that need to be researched to understand the scenario
-Orient: pick the first from the list
-Act: one of [${toolNames}] followed by the input for the tool in quotes
-...(loop n times until the list of entities that need to be researched is empty)
-answer the question
-
-Some additional context:
-${history}
-
-Scenario:
-
-`
-*/
-
-
 
 console.log(prompt)
 console.log(input)
@@ -324,12 +281,12 @@ console.log(input)
               
             }
           }
-          
+          console.log("TOOL RESULT FROM " , toolName,":" ,toolInput ," -> ", observation)
         }
         
         let delta = '\n' + text.replace(/(Action Input:([^\n\r]*)).*/s,'$1') + '\nObservation: ' + observation
         input = input + delta
-        console.log(delta)
+
         
 
         continue
