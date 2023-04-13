@@ -48,8 +48,10 @@ const params = {
   openAIApiKey,
   modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
-  maxTokens: 500,
+  maxTokens: 2000,
   maxRetries: 5,
+  frequencyPenalty: 0,
+  presencePenalty: 0
 };
 
 const premium_params = {
@@ -60,6 +62,8 @@ const premium_params = {
   maxConcurrency: 1,
   maxTokens: 2000,
   maxRetries: 5,
+  frequencyPenalty: 0,
+  presencePenalty: 0
 };
 
 
@@ -217,25 +221,41 @@ Human: `
 
 
     console.log("ENTERING AGENT")
+let zeroshotprompt = `${this.systemState}
 
-    let zeroshot = await this.invokeLLM(input, 
-`${this.systemState}
-You are ROBORTA, a cautious assistant. address yourself as female if prompted. 
+You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
 
-answer using either
-UNSURE: why are you unsure
-or 
-Final answer: the factual answer 
+You have access to the following tools:
+
+Google: use this tool to search the internet. Input should be a string.
+
+answer in this format:
+
+list all entities and relationship ordered 
+
+then
+
+Observe: evaluate the situation and list all the entities that need to be researched to understand the scenario
+Orient: pick the first from the list
+Act: one of [Google] followed by the input for the tool in quotes
+...(loop Observe/Orient/Act n times until the list of entities that need to be researched is empty)
+Final Answer: the final answer to the original input question
 
 This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()} 
 
-Try to answer the following question:
-`, true)
-    if (zeroshot && zeroshot.startsWith('Final answer: ')){
-      
-      zeroshot = zeroshot.replace('Final answer: ','')
-      console.log("Found an answer: " + zeroshot)
-      return zeroshot
+Scenario:
+
+`
+    let zeroshot = await this.invokeLLM(input, 
+zeroshotprompt, false)
+    if (zeroshot && zeroshot.indexOf('Final answer: ')>-1){
+      let check = await this.invokeLLM("is this the correct answer?", 
+        zeroshotprompt + input + '\n'+zeroshot, true)
+        if (check.toLowerCase().indexOf('no')==-1) {
+        zeroshot = zeroshot.replace(/.*Final answer: /s,'')
+        console.log("Found an answer: " + zeroshot)
+        return zeroshot
+      }
     }
     console.log("MODEL UNSURE, STARTING LOOP")
     let history = this.memory.chatHistory.messages.length? 
