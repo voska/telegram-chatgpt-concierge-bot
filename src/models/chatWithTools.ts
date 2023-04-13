@@ -56,7 +56,7 @@ const premium_params = {
   verbose: true,
   temperature: 1.0,
   openAIApiKey,
-  modelName: "gpt-3.5-turbo",
+  modelName: "gpt-4",
   maxConcurrency: 1,
   maxTokens: 2000,
   maxRetries: 5,
@@ -155,8 +155,8 @@ export class Model {
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
 
-    let ask = (await this.model.call([
-        new SystemChatMessage(
+    let ask = (await this.invokeLLM(
+          input,
           `${this.systemState}Categorize the following text, use:
 
           FORGET: this is a order to forget our conversation so far
@@ -167,31 +167,21 @@ export class Model {
 
           answer MUST be one of [FORGET, TASK, QUESTION, STATEMENT, OTHER]
 
-          text: `
-        ),
-        new HumanChatMessage(
-          input
-        ),
-      ])).text;
+          text: `)).replace(/[^A-Z]/g, "");;
     
-      console.log('INPUT CLASSIFIED AS ' + ask)
-    switch(ask) {
-      case "STATEMENT": 
-        this.memory.chatHistory.addUserMessage(input)
-      case "FORGET":
+      
+      
+    
+      if (ask.indexOf("FORGET")>-1) {
         this.memory = new CustomMemory();
         return 'Alright, let me know if you need any assistance or have any questions.'
-      case "OTHER":
-      deafult:
-        return await this.invokeLLM(input,
-`${this.systemState}\n
-You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
-This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}
-Human: `
-        )
 
-      case "TASK": 
-      case "QUESTION":
+      } 
+      if (ask.indexOf("STATEMENT")>-1) {
+        this.memory.chatHistory.addUserMessage(input)
+      } 
+      
+      if (ask.indexOf("QUESTION")>-1 || ask.indexOf("TASK")>-1) {
         let text = await this.invokeAgent(input)
         if (text) {
         this.memory.chatHistory.addUserMessage(input)
@@ -200,8 +190,17 @@ Human: `
         }
         else return "I'm having difficulties answering right now."
         
+      }
 
-    }
+      return await this.invokeLLM(input,
+`${this.systemState}\n
+You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
+This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}
+Human: `
+        )
+
+   
+    
 
    } catch(e) {
       console.log(e)
@@ -269,6 +268,35 @@ Question:
 ${history}
 
 `
+/*
+prompt = 
+`${this.systemState}
+You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
+
+You have access to the following tools:
+
+${toolStrings}
+
+answer in this format:
+
+list all entities and relationship ordered 
+
+then
+
+Observe: list all the entities that need to be researched to understand the scenario
+Orient: pick the first from the list
+Act: one of [${toolNames}] followed by the input for the tool in quotes
+...(loop n times until the list of entities that need to be researched is empty)
+answer the question
+
+Some additional context:
+${history}
+
+Scenario:
+
+`
+*/
+
 
 
 console.log(prompt)
@@ -329,7 +357,7 @@ console.log(input)
 
   async invokeLLM(input: string, prompt:string, premium: boolean = false) {
     
-    let t = (await this.model!.call([
+    let t = (await this.model.call([
       new SystemChatMessage(
         prompt
       ),
@@ -337,7 +365,9 @@ console.log(input)
         input
       ),
       ])).text
-      
+    
+    console.log('EXECUTING LLM\n',prompt,input,'\nRESULT\n',t,'\nGENERATION END')
+
     return t
   }
 
