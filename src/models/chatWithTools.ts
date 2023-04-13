@@ -158,7 +158,7 @@ export class Model {
 
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
-
+    input = (await this.invokeLLM( input, "fix speling and clarify the following sentence:"))
     let ask = (await this.invokeLLM(
           input,
           `${this.systemState}Categorize the following text, use:
@@ -217,7 +217,6 @@ Human: `
     .map((tool) => `${tool.name}: ${tool.description}`)
     .join("\n");
     const toolNames = tools!.map((tool) => tool.name).join("\n");
-
 
 
     console.log("ENTERING AGENT")
