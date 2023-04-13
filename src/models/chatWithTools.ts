@@ -48,7 +48,7 @@ const params = {
   openAIApiKey,
   modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
-  maxTokens: 1000,
+  maxTokens: 500,
   maxRetries: 5,
 };
 
@@ -56,9 +56,9 @@ const premium_params = {
   verbose: true,
   temperature: 1.0,
   openAIApiKey,
-  modelName: "gpt-4",
+  modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
-  maxTokens: 4000,
+  maxTokens: 2000,
   maxRetries: 5,
 };
 
