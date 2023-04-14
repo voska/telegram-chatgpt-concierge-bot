@@ -159,6 +159,9 @@ export class Model {
 
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
+
+    input await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
+
     let ask = (await this.invokeLLM(
           input,
           `${this.systemState}Categorize the following text, use:
@@ -186,7 +189,7 @@ export class Model {
       } 
       
       if (ask.indexOf("QUESTION")>-1 || ask.indexOf("TASK")>-1) {
-        await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
+        
         let text = await this.invokeAgent(input)
         if (text) {
         this.memory.chatHistory.addUserMessage(input)
