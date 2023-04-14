@@ -229,7 +229,7 @@ Human: `
 
 
 
-    let request = history +'\n'+ await this.invokeLLM(input, 'Separate the scenario from the questions in this sentence:')
+    let request = history +'\n'+ await this.invokeLLM(input, 'Separate the scenario from the questions and the tasks in this sentence, translate it in english:')
 
     let prompt = `${this.systemState}
 You are ROBORTA, a precise assistant, address yourself as female if prompted, follow the user request as best as you can. 

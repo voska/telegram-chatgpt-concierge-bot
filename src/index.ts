@@ -40,7 +40,7 @@ bot.on(message('voice'), async (ctx) => {
   }
   const state = chat_maps['key_'+ctx.message.chat.id]
   
-  if (!(valid_ids.includes(''+ctx.update.message.from.id))) {
+  if (valid_ids && !(valid_ids.includes(''+ctx.update.message.from.id))) {
     const response = 'contact support for enabling this feature'  
     console.log('ACCESS ATTEMPT BY '+ ctx.update.message.from.id)
     await ctx.reply(response);
@@ -90,7 +90,7 @@ bot.on(message('text'), async (ctx) => {
 
 
 
-  if (!(valid_ids.includes(''+ctx.update.message.from.id))) {
+  if (valid_ids && !(valid_ids.includes(''+ctx.update.message.from.id))) {
     const response = 'contact support for enabling this feature'  
     console.log('ACCESS ATTEMPT BY '+ ctx.update.message.from.id)
     await ctx.reply(response);
