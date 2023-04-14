@@ -256,7 +256,15 @@ Action Input: one entity or one relationship to research
    
     
     answer_chain.push(new SystemChatMessage(`${this.systemState}
-      You are ROBORTA, a precise assistant, address yourself as female if prompted, answer as best as you can. `))
+      You are ROBORTA, a precise assistant, address yourself as female if prompted, answer as best as you can. You have access to the following tools, these tool are very simple and can only explore one entity or one relationship at a time:
+
+      ${toolStrings}
+      
+      Use tools to clarify the entities until all entities in the scenario are clear. answer in this format:
+      
+      Action: one action to take, should be one of [${toolNames}]
+      Action Input: one entity or one relationship to research
+      Final Answer: `))
     answer_chain.push(new HumanChatMessage( history +'\n'+input))
 
 
@@ -301,7 +309,8 @@ Action Input: one entity or one relationship to research
       
       }
 
-      return (await this.invokeLLMComplex(answer_chain,true))   
+      text =  (await this.invokeLLMComplex(answer_chain,true))   
+      return text.replace(/.*Final Answer:/s,'')
 
     }
 
