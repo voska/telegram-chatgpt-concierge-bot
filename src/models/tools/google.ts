@@ -24,7 +24,7 @@ export class GoogleTool extends DynamicTool {
 
         const cr = await llm.call([
           new SystemChatMessage(
-            "answer these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n with entities and relationships extracted from this text: "
+            "user had these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n summarize the text and extract relevant information: "
           ),
           new HumanChatMessage(
             JSON.stringify({

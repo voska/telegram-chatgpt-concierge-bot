@@ -38,7 +38,7 @@ export class WikipediaTool extends DynamicTool {
           
           const cr = await llm.call([
             new SystemChatMessage(
-              "extract entities related to these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n with entities and relationships extracted from this text: "
+              "user had these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n summarize the text and extract relevant information: "
             ),
             new HumanChatMessage(
               searchResults
