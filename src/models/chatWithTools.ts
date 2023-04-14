@@ -160,7 +160,7 @@ export class Model {
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
 
-    input await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
+    input = await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
 
     let ask = (await this.invokeLLM(
           input,
