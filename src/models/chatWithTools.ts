@@ -28,6 +28,7 @@ import {
   HumanChatMessage,
   ChatMessage,
   SystemChatMessage,
+  AIChatMessage,
 } from "langchain/schema";
 import { BufferMemory  } from "langchain/memory";
 import { ConversationChain } from "langchain/chains";
@@ -66,48 +67,48 @@ const premium_params = {
   presencePenalty: 0
 };
 
-
+const getBufferString = function(
+  messages: BaseChatMessage[],
+  human_prefix = "Me",
+  ai_prefix = "ROBORTA"
+): string {
+  const string_messages: string[] = [];
+  for (const m of messages) {
+    let role: string;
+    if (m._getType() === "human") {
+      role = human_prefix;
+    } else if (m._getType() === "ai") {
+      role = ai_prefix;
+    } else if (m._getType() === "system") {
+      role = "System";
+    } else if (m._getType() === "generic") {
+      role = (m as ChatMessage).role;
+    } else {
+      throw new Error(`Got unsupported message type: ${m}`);
+    }
+    string_messages.push(`${role}: ${m.text}`);
+  }
+  return string_messages.join("\n");
+}
 
 class CustomMemory extends BufferMemory {
   constructor() {
     super({ memoryKey: "chat_history" });
   }
 
-  getBufferString = function(
-    messages: BaseChatMessage[],
-    human_prefix = "Me",
-    ai_prefix = "ROBORTA"
-  ): string {
-    const string_messages: string[] = [];
-    for (const m of messages) {
-      let role: string;
-      if (m._getType() === "human") {
-        role = human_prefix;
-      } else if (m._getType() === "ai") {
-        role = ai_prefix;
-      } else if (m._getType() === "system") {
-        role = "System";
-      } else if (m._getType() === "generic") {
-        role = (m as ChatMessage).role;
-      } else {
-        throw new Error(`Got unsupported message type: ${m}`);
-      }
-      string_messages.push(`${role}: ${m.text}`);
-    }
-    return string_messages.join("\n");
-  }
+
 
   async returnCurrentStack(): Promise<MemoryVariables> {
     return   this.chatHistory.messages
     
   }
   async returnCurrentStackAsString(): Promise<String> {
-    return this.getBufferString(this.chatHistory.messages);
+    return getBufferString(this.chatHistory.messages);
   }
   async loadMemoryVariables(_values: InputValues): Promise<MemoryVariables> {
 
     const result = {
-      [this.memoryKey]: this.getBufferString(this.chatHistory.messages)
+      [this.memoryKey]: getBufferString(this.chatHistory.messages)
     };
     
     return result;
@@ -158,7 +159,6 @@ export class Model {
 
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
-    input = (await this.invokeLLM( input, "fix speling and clarify the following sentence:"))
     let ask = (await this.invokeLLM(
           input,
           `${this.systemState}Categorize the following text, use:
@@ -186,6 +186,8 @@ export class Model {
       } 
       
       if (ask.indexOf("QUESTION")>-1 || ask.indexOf("TASK")>-1) {
+        input = (await this.invokeLLM( input, "fix speling and clarify the following sentence, separating the scenario from the questions:", true))
+
         let text = await this.invokeAgent(input)
         if (text) {
         this.memory.chatHistory.addUserMessage(input)
@@ -223,41 +225,41 @@ Human: `
     let history = this.memory.chatHistory.messages.length? 
     `This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}, the question may be related.`:``
 
+    
+
+
+
+    let request = history +'\n'+ await this.invokeLLM(input, 'Separate the scenario from the questions in this sentence:')
 
     let prompt = `${this.systemState}
-You are ROBORTA, a helpful assistant, address yourself as female if prompted. Answer the following questions as best you can. 
-  
-You have access to the following tools:
-    
+You are ROBORTA, a precise assistant, address yourself as female if prompted, follow the user request as best as you can. 
+
+You have access to the following tools, these tool are very simple and can only explore one entity or one relationship at a time:
+
 ${toolStrings}
 
-Use the following format (action and action input are useful only to retrieve facts that you don't already know):
+Use tools to clarify the entities until all entities in the scenario are clear. answer in this format:
 
-Question: the input question you must answer
-Thought: you should always think about what to do
-Action: the action to take, should be one of [${toolNames}]
-Action Input: the input to the action
-Observation: the result of the action
-... (this Thought/Action/Action Input/Observation can repeat N times)
-Thought: I now know the final answer
-Final Answer: the final answer to the original input question
-
-Begin!
-
-${history}
-
-Question: 
-
+Action: one action to take, should be one of [${toolNames}]
+Action Input: one entity or one relationship to research
 
 `
 
-console.log(prompt)
-console.log(input)
 
+    let discover_chain:BaseChatMessage[] =   []
+    let answer_chain:BaseChatMessage[] =   []
+
+    answer_chain.push(new SystemChatMessage(`${this.systemState}
+      You are ROBORTA, a precise assistant, address yourself as female if prompted, answer as best as you can. `))
+    answer_chain.push(new HumanChatMessage(request))
+
+
+    discover_chain.push(new SystemChatMessage(prompt))
+    discover_chain.push(new HumanChatMessage(request))
 
     for (let i=0; i< 10; i++) {
-      let text = (await this.invokeLLM(input, prompt,true))
-
+      let text = (await this.invokeLLMComplex(discover_chain,true))
+      discover_chain.push(new AIChatMessage(text))
   
       if (text.indexOf('Action:')>-1 && text.indexOf('Action Input:')>-1 ) {
         let regex = /Action:(.*)$/m;
@@ -268,37 +270,30 @@ console.log(input)
         let toolInput = match ? match![1].trim() : undefined;
         let observation = `asking ${toolName} for ${toolInput} didn't provide any insight`
 
-        if (toolName && toolInput) {
-          for (let t of tools!) {
-            if (t.name == toolName) {
-              try {
-              observation = await t.call(toolInput!)
+          if (toolName && toolInput) {
+            for (let t of tools!) {
+              if (t.name == toolName) {
+                try {
+                observation = await t.call(toolInput!)
 
-              } catch (e) {
-                console.log(e)
+                } catch (e) {
+                  console.log(e)
+                }
+                
               }
-              
             }
+            console.log("TOOL RESULT FROM " , toolName,":" ,toolInput ," -> ", observation)
+            discover_chain.push(new HumanChatMessage("Observation: " + observation))
+            answer_chain.push(new HumanChatMessage("Observation: " + observation))
+            continue
           }
-          console.log("TOOL RESULT FROM " , toolName,":" ,toolInput ," -> ", observation)
-        }
-        
-        let delta = '\n' + text.replace(/(Action Input:([^\n\r]*)).*/s,'$1') + '\nObservation: ' + observation
-        input = input + delta
-
-        
-
-        continue
+      
       }
 
-      if (text.includes("Final Answer:")) {
-        const parts = text.split("Final Answer:");
-        console.log(text)
-        const answer = parts[parts.length - 1].trim();
-        return answer
-      } 
+      return (await this.invokeLLMComplex(answer_chain,true))   
 
     }
+
     return await this.invokeLLM(input, `${this.systemState}\nYou are ROBORTA, a fussy assistant, address yourself as female if prompted. 
 
     Don't answer any question and don't perform any task. Someting in the user message is not clear. Ask the user to clarify the message, identify what is not clear.
@@ -307,9 +302,10 @@ console.log(input)
   }
 
 
+
   async invokeLLM(input: string, prompt:string, premium: boolean = false) {
-    
-    let t = (await this.model.call([
+    let m = premium? this.model_premium : this.model
+    let t = (await m.call([
       new SystemChatMessage(
         prompt
       ),
@@ -319,6 +315,16 @@ console.log(input)
       ])).text
     
     console.log('EXECUTING LLM\n',prompt,input,'\nRESULT\n',t,'\nGENERATION END')
+
+    return t
+  }
+  async invokeLLMComplex(messages: BaseChatMessage[], premium: boolean = false) {
+    
+    let m = premium? this.model_premium : this.model
+    let t = (await m.call(messages)).text
+
+    console.log('EXECUTING LLM\n', getBufferString(messages) ,'\nRESULT\n',t,'\nGENERATION END')
+
 
     return t
   }
