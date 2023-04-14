@@ -14,7 +14,7 @@ import { healthcheck } from "./lib/healthcheck";
 const workDir = "./tmp";
 const telegramToken = process.env.TELEGRAM_TOKEN!;
 
-const bot = new Telegraf(telegramToken);
+const bot = new Telegraf(telegramToken, {handlerTimeout: 9_000_000});
 
 
 if (!existsSync(workDir)) {

@@ -59,7 +59,7 @@ const premium_params = {
   verbose: true,
   temperature: 1.0,
   openAIApiKey,
-  modelName: "gpt-4",
+  modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
   maxTokens: 2000,
   maxRetries: 5,
@@ -255,7 +255,7 @@ Action Input: one entity or one relationship to research
 
     discover_chain.push(new SystemChatMessage(prompt))
     discover_chain.push(new HumanChatMessage(request))
-
+    let toolInputs:string[] = []
     for (let i=0; i< 10; i++) {
       let text = (await this.invokeLLMComplex(discover_chain,true))
       discover_chain.push(new AIChatMessage(text))
@@ -268,8 +268,13 @@ Action Input: one entity or one relationship to research
         match = text.match(regex);
         let toolInput = match ? match![1].trim() : undefined;
         let observation = `asking ${toolName} for ${toolInput} didn't provide any insight`
-
-          if (toolName && toolInput) {
+        
+        if (toolName && toolInput) {
+          if ((toolName+toolInput) in toolInputs) {
+              discover_chain.push(new HumanChatMessage("Observation: Nothing new can be discovered from this tool" ))
+              continue;
+            }
+            toolInputs.push(toolName+toolInput)
             for (let t of tools!) {
               if (t.name == toolName) {
                 try {
