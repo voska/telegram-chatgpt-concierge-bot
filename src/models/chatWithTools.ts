@@ -283,7 +283,7 @@ Action Input: one entity or one relationship to research
             }
             console.log("TOOL RESULT FROM " , toolName,":" ,toolInput ," -> ", observation)
             discover_chain.push(new HumanChatMessage("Observation: " + observation))
-            answer_chain.push(new HumanChatMessage("Observation: " + observation))
+            answer_chain.push(new AIChatMessage("Observation: " + observation))
             continue
           }
       
