@@ -1,7 +1,7 @@
 import { DynamicTool } from "langchain/tools";
 import google from "googlethis";
 import { ChatOpenAI } from "langchain/chat_models";
-import { HumanChatMessage, SystemChatMessage } from "langchain/schema";
+import { AIChatMessage, HumanChatMessage, SystemChatMessage } from "langchain/schema";
 
 
 export class GoogleTool extends DynamicTool {
@@ -10,7 +10,7 @@ export class GoogleTool extends DynamicTool {
     super({
       name: "Google",
       description:
-        "useful to research current events",
+        "useful to search internet",
       func: async (searchPhrase: string) => {
         const response = await google.search(searchPhrase, {
           page: 0,
@@ -23,13 +23,18 @@ export class GoogleTool extends DynamicTool {
     
 
         const cr = await llm.call([
-          new SystemChatMessage(
-            "user had these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n summarize the text and extract relevant information: "
-          ),
           new HumanChatMessage(
-            JSON.stringify({
-              results: response.results,
-              featured: response.featured_snippet,
+            'You are ROBORTA, a user assistant. You have tools at your disposal to research user questions.\nExtract all data related to the scenario and their relationship.'
+          ),
+          new SystemChatMessage(
+            question
+          ),
+          new AIChatMessage(
+            'Search ' + this.name + ': ' + searchPhrase
+          ),
+          new AIChatMessage(
+            'Observe: ' +JSON.stringify({
+              response
             })
           ),
         ]);

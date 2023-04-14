@@ -1,44 +1,17 @@
-import { AgentExecutor, Tool, initializeAgentExecutor } from "langchain/agents";
+import { AgentExecutor } from "langchain/agents";
 import { ChatOpenAI } from "langchain/chat_models";
-import { LLMChain } from "langchain";
-import { ZeroShotAgent } from "langchain/agents";
-import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder,
-  SystemMessagePromptTemplate,
-} from "langchain/prompts";
-import {
-  LLMSingleActionAgent,
-  AgentActionOutputParser
-} from "langchain/agents";
-import {
-  BasePromptTemplate,
-  SerializedBasePromptTemplate,
-  renderTemplate,
-  BaseChatPromptTemplate,
-} from "langchain/prompts";
 import {
   InputValues,
-  PartialValues,
-  AgentStep,
-  AgentAction,
-  AgentFinish,
   BaseChatMessage,
   HumanChatMessage,
-  ChatMessage,
   SystemChatMessage,
   AIChatMessage,
+  ChatMessage,
 } from "langchain/schema";
 import { BufferMemory  } from "langchain/memory";
-import { ConversationChain } from "langchain/chains";
 import { Configuration } from "openai";
-import { OpenAIApi } from "openai";
 import { GoogleTool } from "./tools/google";
-import { Message } from "telegraf/typings/core/types/typegram";
 import { MemoryVariables, OutputValues } from "langchain/dist/memory/base";
-import { DynamicTool } from "langchain/tools";
-import { CalculatorTool } from "./tools/calculator";
 import { WikipediaTool } from "./tools/wikipedia";
 
 const openAIApiKey = process.env.OPENAI_API_KEY!;
@@ -69,8 +42,9 @@ const premium_params = {
 
 const getBufferString = function(
   messages: BaseChatMessage[],
-  human_prefix = "Me",
-  ai_prefix = "ROBORTA"
+  human_prefix = "User",
+  ai_prefix = "ROBORTA",
+  generic_prefix = "Observe"
 ): string {
   const string_messages: string[] = [];
   for (const m of messages) {
@@ -82,7 +56,7 @@ const getBufferString = function(
     } else if (m._getType() === "system") {
       role = "System";
     } else if (m._getType() === "generic") {
-      role = (m as ChatMessage).role;
+      role = generic_prefix;
     } else {
       throw new Error(`Got unsupported message type: ${m}`);
     }
@@ -91,6 +65,14 @@ const getBufferString = function(
   return string_messages.join("\n");
 }
 
+
+const getHistoryAsObservations = function(messages: BaseChatMessage[]) {
+  const string_messages: string[] = [];
+  for (const m of messages) {
+    string_messages.push(`Observation: ${m.text}`);
+  }
+  return string_messages.join("\n");
+}
 class CustomMemory extends BufferMemory {
   constructor() {
     super({ memoryKey: "chat_history" });
@@ -158,14 +140,13 @@ export class Model {
   public async call(input: string, ctx: any) {
 
     try{
-    this.systemState = `today is ${this.getCurrentDate()}. ` 
+    this.systemState = `Today is ${this.getCurrentDate()} and you can use tools to get new information.` 
 
-    input = await this.invokeLLM(input, `Rrewrite the next sentence in english, you must only answer with the sentence rewritten in english.
+    console.log("\n\n\nINVOKING CATEGORIZATION")
+    let ask = (await this.invokeLLMComplex([
 
-    Rewrite:`, true)
-
-    let ask = (await this.invokeLLM(
-          input,
+          new HumanChatMessage(
+          
           `${this.systemState}Categorize the following text, use:
 
           FORGET: this is a order to forget our conversation so far
@@ -176,18 +157,23 @@ export class Model {
 
           answer MUST be one of [FORGET, TASK, QUESTION, STATEMENT, OTHER]
 
-          text: `)).replace(/[^A-Z]/g, "");;
+          text: `), new AIChatMessage(input)])).toLocaleUpperCase();
     
       
       
     
       if (ask.indexOf("FORGET")>-1) {
         this.memory = new CustomMemory();
-        return 'Alright, let me know if you need any assistance or have any questions.'
+        console.log("\n\n\nINVOKING CLEANUP RESPONSE")
+        return await this.invokeLLMComplex([
+          new SystemChatMessage(`${this.systemState}\n
+          You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
+          Greet the user.`)]
+        )
 
       } 
       if (ask.indexOf("STATEMENT")>-1) {
-        this.memory.chatHistory.addUserMessage(input)
+        this.memory.chatHistory.messages.push(new ChatMessage(input, "Observation: "))
       } 
       
       if (ask.indexOf("QUESTION")>-1 || ask.indexOf("TASK")>-1) {
@@ -198,16 +184,22 @@ export class Model {
         this.memory.chatHistory.addAIChatMessage(text)
         return text
         }
-        else return "I'm having difficulties answering right now."
+        console.log("\n\n\nINVOKING APOLOGY")
+        return await this.invokeLLMComplex([
+          new SystemChatMessage(`${this.systemState}\n
+          You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
+          The system had an issue, write a polite apology.`)]
+        )
         
       }
-
-      return await this.invokeLLM(input,
-`${this.systemState}\n
-You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
-This was our conversation so far:\n${await this.memory.returnCurrentStackAsString()}
-Human: `
-        )
+      console.log("\n\n\nINVOKING CHITCHAT")
+      return await this.invokeLLMComplex([
+        new SystemChatMessage(`${this.systemState}\n
+        You are ROBORTA, a helpful and factual chat bot, address yourself as female if needed. 
+        This was our conversation so far:`),
+        new SystemChatMessage(getHistoryAsObservations(this.memory.chatHistory.messages)),
+        new HumanChatMessage(input)
+      ])
 
    
     
@@ -242,11 +234,14 @@ You have access to the following tools, these tool are very simple and can only 
 
 ${toolStrings}
 
-Use tools to clarify the entities until all entities in the scenario are clear. answer in this format:
+List the ambiguous or underpsecified entities to research. Answer in this format:
 
 Action: one action to take, should be one of [${toolNames}]
 Action Input: one entity or one relationship to research
+Observe: the data from the tool
+...(repeat N time until all entities in the user scenario are clear)
 
+Begin!
 `
 
 
@@ -259,23 +254,32 @@ Action Input: one entity or one relationship to research
       You are ROBORTA, a precise assistant, address yourself as female if prompted, answer as best as you can. You have access to the following tools, these tool are very simple and can only explore one entity or one relationship at a time:
 
       ${toolStrings}
-      
-      Use tools to clarify the entities until all entities in the scenario are clear. answer in this format:
-      
-      Action: one action to take, should be one of [${toolNames}]
-      Action Input: one entity or one relationship to research
-      Final Answer: `))
-    answer_chain.push(new HumanChatMessage( history +'\n'+input))
+
+      Answer in english.
+      `))
+    answer_chain.push(new SystemChatMessage(getHistoryAsObservations(this.memory.chatHistory.messages)))  
+    
 
 
     discover_chain.push(new SystemChatMessage(prompt))
-    discover_chain.push(new HumanChatMessage( history +'\n'+(await this.invokeLLM(input, 'Extract the scenario :') )))
+
+    discover_chain.push(new SystemChatMessage(getHistoryAsObservations(this.memory.chatHistory.messages)))  
+    input
+     
+    console.log("\n\n\nINVOKING EXTRACTION")
+    discover_chain.push(new HumanChatMessage( (await this.invokeLLMComplex(
+      [ new HumanChatMessage('Extract the scenario from the following sentence, answer in english:'),
+        new AIChatMessage(input)]) )))
+
     let toolInputs:string[] = []
     for (let i=0; i< 10; i++) {
-      let text = (await this.invokeLLMComplex(discover_chain,true))
-      discover_chain.push(new AIChatMessage(text))
+      console.log("\n\n\nINVOKING LOOP")
+      let text = (await this.invokeLLMComplex(discover_chain,true,['Observe:']))
+      text = text.replace(/'Observe:.*/s,'')
+
   
       if (text.indexOf('Action:')>-1 && text.indexOf('Action Input:')>-1 ) {
+
         let regex = /Action:(.*)$/m;
         let match = text.match(regex);
         let toolName = match ? match![1].trim() : undefined;
@@ -286,7 +290,7 @@ Action Input: one entity or one relationship to research
         
         if (toolName && toolInput) {
           if ((toolName+toolInput) in toolInputs) {
-              discover_chain.push(new HumanChatMessage("Observation: Nothing new can be discovered from this tool" ))
+              discover_chain.push(new HumanChatMessage("Observe: Nothing new can be discovered from this tool" ))
               continue;
             }
             toolInputs.push(toolName+toolInput)
@@ -295,6 +299,7 @@ Action Input: one entity or one relationship to research
                 try {
                 observation = await t.call(toolInput!)
 
+                
                 } catch (e) {
                   console.log(e)
                 }
@@ -302,46 +307,39 @@ Action Input: one entity or one relationship to research
               }
             }
             console.log("TOOL RESULT FROM " , toolName,":" ,toolInput ," -> ", observation)
-            discover_chain.push(new HumanChatMessage("Observation: " + observation))
-            answer_chain.push(new AIChatMessage("Observation: " + observation))
+            discover_chain.push(new AIChatMessage(text))
+            discover_chain.push(new AIChatMessage("Observation: " + observation))
+            answer_chain.push(new SystemChatMessage("Observation: " + observation))
             continue
           }
       
       }
-
+      console.log("\n\n\nINVOKING ANSWER CLEANUP")
+      answer_chain.push(new HumanChatMessage( input) )
       text =  (await this.invokeLLMComplex(answer_chain,true))   
-      return text.replace(/.*Final Answer:/s,'')
+      return text;
 
     }
 
-    return await this.invokeLLM(input, `${this.systemState}\nYou are ROBORTA, a fussy assistant, address yourself as female if prompted. 
+    console.log("\n\n\nINVOKING TASK CLARIFICAITON")
+
+    return await this.invokeLLMComplex([ new HumanChatMessage( `${this.systemState}\nYou are ROBORTA, a fussy assistant, address yourself as female if prompted. 
 
     Don't answer any question and don't perform any task. Someting in the user message is not clear. Ask the user to clarify the message, identify what is not clear.
     
-    Message:`)
+    Message:`), new HumanChatMessage(input)]);
   }
 
 
 
-  async invokeLLM(input: string, prompt:string, premium: boolean = false) {
-    let m = premium? this.model_premium : this.model
-    let t = (await m.call([
-      new SystemChatMessage(
-        prompt
-      ),
-      new HumanChatMessage(
-        input
-      ),
-      ])).text
-    
-    console.log('EXECUTING LLM\n',prompt,input,'\nRESULT\n',t,'\nGENERATION END')
-
-    return t
-  }
-  async invokeLLMComplex(messages: BaseChatMessage[], premium: boolean = false) {
+  async invokeLLMComplex(messages: BaseChatMessage[], premium: boolean = false, stops: string[]=[]) {
     
     let m = premium? this.model_premium : this.model
-    let t = (await m.call(messages)).text
+    let t = ''
+    if (stops.length>0)
+      t = (await m.call(messages,stops)).text
+    else
+      t = (await m.call(messages)).text
 
     console.log('EXECUTING LLM\n', getBufferString(messages) ,'\nRESULT\n',t,'\nGENERATION END')
 

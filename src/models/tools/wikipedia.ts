@@ -1,7 +1,7 @@
 import { DynamicTool } from "langchain/tools";
 import  wiki  from 'wikijs';
 import { ChatOpenAI } from "langchain/chat_models";
-import { HumanChatMessage, SystemChatMessage } from "langchain/schema";
+import { AIChatMessage, HumanChatMessage, SystemChatMessage } from "langchain/schema";
 import { loadQAMapReduceChain } from "langchain/chains";
 import { Document } from "langchain/document";
 
@@ -32,17 +32,31 @@ export class WikipediaTool extends DynamicTool {
             ps = ps.replace('Page Title: ','') 
             
             searchResults = JSON.stringify(await (await wiki().page(ps)).content())
+
+            if (searchResults.length > 1500) {
+              searchResults = JSON.stringify(await (await wiki().page(ps)).summary())
+              let tables = JSON.stringify(await (await wiki().page(ps)).tables())
+              if (searchResults.length + tables.length < 1500) {
+                searchResults=searchResults+tables
+              }
+            }
           
 
           }
           
           const cr = await llm.call([
-            new SystemChatMessage(
-              "user had these questions:  \n- " + question + '\n- ' + searchPhrase  +"\n summarize the text and extract relevant information: "
-            ),
             new HumanChatMessage(
-              searchResults
+              'You are ROBORTA, a user assistant. You have tools at your disposal to research user questions.\nExtract all data related to the scenario and their relationship.'
             ),
+            new SystemChatMessage(
+              question
+            ),
+            new AIChatMessage(
+              'Search ' + this.name + ': ' + searchPhrase
+            ),
+            new AIChatMessage(
+              searchResults
+            )
           ]);
           return cr.text;
  
