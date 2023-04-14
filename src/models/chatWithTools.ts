@@ -160,7 +160,7 @@ export class Model {
     try{
     this.systemState = `today is ${this.getCurrentDate()}. ` 
 
-    input = await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
+    input = await this.invokeLLM(input, 'Rewrite this in english:')
 
     let ask = (await this.invokeLLM(
           input,
@@ -231,7 +231,7 @@ Human: `
 
 
 
-    let request = history +'\n'+input
+    
 
     let prompt = `${this.systemState}
 You are ROBORTA, a precise assistant, address yourself as female if prompted, follow the user request as best as you can. 
@@ -251,13 +251,15 @@ Action Input: one entity or one relationship to research
     let discover_chain:BaseChatMessage[] =   []
     let answer_chain:BaseChatMessage[] =   []
 
+   
+    
     answer_chain.push(new SystemChatMessage(`${this.systemState}
       You are ROBORTA, a precise assistant, address yourself as female if prompted, answer as best as you can. `))
-    answer_chain.push(new HumanChatMessage(request))
+    answer_chain.push(new HumanChatMessage( history +'\n'+input))
 
 
     discover_chain.push(new SystemChatMessage(prompt))
-    discover_chain.push(new HumanChatMessage(request))
+    discover_chain.push(new HumanChatMessage( history +'\n'+(await this.invokeLLM(input, 'Extract the scenario :') )))
     let toolInputs:string[] = []
     for (let i=0; i< 10; i++) {
       let text = (await this.invokeLLMComplex(discover_chain,true))
