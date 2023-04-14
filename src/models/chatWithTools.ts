@@ -186,8 +186,7 @@ export class Model {
       } 
       
       if (ask.indexOf("QUESTION")>-1 || ask.indexOf("TASK")>-1) {
-        input = (await this.invokeLLM( input, "fix speling and clarify the following sentence, separating the scenario from the questions:", true))
-
+        await this.invokeLLM(input, 'Rewrite this sentence in english, separating the scenario from the questions and the tasks in this sentence:')
         let text = await this.invokeAgent(input)
         if (text) {
         this.memory.chatHistory.addUserMessage(input)
@@ -229,7 +228,7 @@ Human: `
 
 
 
-    let request = history +'\n'+ await this.invokeLLM(input, 'Separate the scenario from the questions and the tasks in this sentence, translate it in english:')
+    let request = history +'\n'+input
 
     let prompt = `${this.systemState}
 You are ROBORTA, a precise assistant, address yourself as female if prompted, follow the user request as best as you can. 
