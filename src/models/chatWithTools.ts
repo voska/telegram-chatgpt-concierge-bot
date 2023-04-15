@@ -316,6 +316,7 @@ Begin!
       }
       console.log("\n\n\nINVOKING ANSWER CLEANUP")
       answer_chain.push(new HumanChatMessage( input) )
+      answer_chain.push(new HumanChatMessage( 'Answer in english') )
       text =  (await this.invokeLLMComplex(answer_chain,true))   
       return text;
 
