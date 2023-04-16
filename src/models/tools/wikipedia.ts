@@ -45,18 +45,23 @@ export class WikipediaTool extends DynamicTool {
           }
           
           const cr = await llm.call([
-            new HumanChatMessage(
-              'You are ROBORTA, a user assistant. You have tools at your disposal to research user questions.\nExtract all data related to the scenario and their relationship.'
+            new SystemChatMessage (
+              'You are ROBORTA, a user assistant. You have tools at your disposal to research user questions.\nAnswer the question with the data provided.'
             ),
-            new SystemChatMessage(
+            new HumanChatMessage(
               question
             ),
             new AIChatMessage(
               'Search ' + this.name + ': ' + searchPhrase
             ),
             new AIChatMessage(
-              searchResults
-            )
+              'Observe: ' +JSON.stringify({
+                response
+              })
+            ),
+            new AIChatMessage(
+              'Answer:'
+            ),
           ]);
           return cr.text;
  
