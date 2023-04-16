@@ -234,8 +234,9 @@ You have access to the following tools, these tool are very simple and can only 
 
 ${toolStrings}
 
-List the ambiguous or underpsecified entities to research. Answer in this format:
+Always answer in this format:
 
+Thought: list the ambiguous or underpsecified entities to research. 
 Action: one action to take, should be one of [${toolNames}]
 Action Input: one entity or one relationship to research
 Observe: the data from the tool
@@ -274,6 +275,7 @@ Begin!
     let toolInputs:string[] = []
     for (let i=0; i< 10; i++) {
       console.log("\n\n\nINVOKING LOOP")
+      discover_chain.push(new AIChatMessage('Thought:'))
       let text = (await this.invokeLLMComplex(discover_chain,true,['Observe:']))
       text = text.replace(/'Observe:.*/s,'')
 
