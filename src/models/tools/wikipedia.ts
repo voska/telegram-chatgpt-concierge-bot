@@ -55,9 +55,7 @@ export class WikipediaTool extends DynamicTool {
               'Search ' + this.name + ': ' + searchPhrase
             ),
             new AIChatMessage(
-              'Observe: ' +JSON.stringify({
-                response
-              })
+              'Observe: ' +searchResults
             ),
             new AIChatMessage(
               'Answer:'
