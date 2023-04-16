@@ -74,8 +74,10 @@ const getHistoryAsObservations = function(messages: BaseChatMessage[]) {
   return string_messages.join("\n");
 }
 class CustomMemory extends BufferMemory {
-  constructor() {
+  llm: ChatOpenAI;
+  constructor(llm:ChatOpenAI) {
     super({ memoryKey: "chat_history" });
+    this.llm = llm;
   }
 
 
@@ -107,6 +109,25 @@ class CustomMemory extends BufferMemory {
     outputValues.text && this.chatHistory.addAIChatMessage(outputValues.text)
 
   }
+
+ async addMessage(message: ChatMessage) {
+    this.chatHistory.messages.push()
+    
+    let restOfArray = this.chatHistory.messages.slice(0, -4);
+    const lastThreeElements = this.chatHistory.messages.slice(-4);
+    if (restOfArray.length>0) {
+      restOfArray.push(new HumanChatMessage('Summarize all our conversation so far'))
+      restOfArray.push(new AIChatMessage('This is a summary of all our previous conversations:'))
+      let summary = new AIChatMessage((await this.llm.call(restOfArray)).text);
+      restOfArray = restOfArray.filter(e=> {return false})
+      restOfArray.push(summary)
+      restOfArray.concat(lastThreeElements)
+      this.chatHistory.messages = restOfArray
+    }
+
+
+  }
+
 }
 
 
@@ -122,7 +143,7 @@ export class Model {
   public executor?: AgentExecutor;
   public model = new ChatOpenAI(params, configuration);
   public model_premium = new ChatOpenAI(premium_params, configuration);;
-  public memory = new CustomMemory()
+  public memory = new CustomMemory(this.model)
   systemState: string | undefined;
   constructor() {
 
@@ -163,7 +184,7 @@ export class Model {
       
     
       if (ask.indexOf("FORGET")>-1) {
-        this.memory = new CustomMemory();
+        this.memory = new CustomMemory(this.model);
         console.log("\n\n\nINVOKING CLEANUP RESPONSE")
         return await this.invokeLLMComplex([
           new SystemChatMessage(`${this.systemState}\n
