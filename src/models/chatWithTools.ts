@@ -18,7 +18,7 @@ const openAIApiKey = process.env.OPENAI_API_KEY!;
 
 const params = {
   verbose: true,
-  temperature: 1.0,
+  temperature: 0.7,
   openAIApiKey,
   modelName: "gpt-3.5-turbo",
   maxConcurrency: 1,
@@ -30,11 +30,11 @@ const params = {
 
 const premium_params = {
   verbose: true,
-  temperature: 1.0,
+  temperature: 0.7,
   openAIApiKey,
-  modelName: "gpt-3.5-turbo",
+  modelName: "gpt-4",
   maxConcurrency: 1,
-  maxTokens: 2000,
+  maxTokens: 4000,
   maxRetries: 5,
   frequencyPenalty: 0,
   presencePenalty: 0
@@ -290,8 +290,8 @@ Begin!
      
     console.log("\n\n\nINVOKING EXTRACTION")
     discover_chain.push(new HumanChatMessage( (await this.invokeLLMComplex(
-      [ new HumanChatMessage('Extract the scenario from the following sentence, answer in english:'),
-        new AIChatMessage(input)]) )))
+      [ new HumanChatMessage('Translate in english and reprhase so that the question is at the end:'),
+        new HumanChatMessage(input)]) )))
 
     let toolInputs:string[] = []
     for (let i=0; i< 10; i++) {
