@@ -9,7 +9,6 @@ import { textToSpeech } from "./lib/htApi";
 import { createReadStream, existsSync, mkdirSync } from "fs";
 import { Model as ChatModel } from "./models/chat";
 import { Model as ChatWithTools } from "./models/chatWithTools";
-import { healthcheck } from "./lib/healthcheck";
 
 const workDir = "./tmp";
 const telegramToken = process.env.TELEGRAM_TOKEN!;
@@ -21,8 +20,6 @@ if (!existsSync(workDir)) {
   mkdirSync(workDir);
 }
 
-healthcheck();
-
 bot.start((ctx) => {
 
   ctx.reply("Welcome to my Telegram bot!");
@@ -33,104 +30,99 @@ bot.help((ctx) => {
   ctx.reply("Send me a message and I will echo it back to you.");
 });
 
-bot.on(message('voice'), async (ctx) => {
+bot.on("voice", async (ctx) => {
 
-  if (!(('key_'+ctx.message.chat.id) in chat_maps)) {
-    chat_maps['key_'+ctx.message.chat.id] = default_chat_context(ctx.message.chat.id)
+  if(process.env.SERVE_THIS_USER_ONLY && parseInt(process.env.SERVE_THIS_USER_ONLY) !== ctx.message.chat.id){
+    console.log(`User ${ctx.message.chat.id.toString()} is not allowed to be served.`);
+    await ctx.reply(
+      "Sorry, you're not allowed to be served by me."
+    );
+    return;
   }
-  const state = chat_maps['key_'+ctx.message.chat.id]
-  
-  if (valid_ids && !(valid_ids.includes(''+ctx.update.message.from.id))) {
-    const response = 'contact support for enabling this feature'  
-    console.log('ACCESS ATTEMPT BY '+ ctx.update.message.from.id)
-    await ctx.reply(response);
+
+  const voice = ctx.message.voice;
+  await ctx.sendChatAction("typing");
+
+  let localFilePath;
+
+  try {
+    localFilePath = await downloadVoiceFile(workDir, voice.file_id, bot);
+  } catch (error) {
+    console.log(error);
+    await ctx.reply(
+      "Whoops! There was an error while downloading the voice file. Maybe ffmpeg is not installed?"
+    );
+    return;
+  }
+
+  const transcription = await postToWhisper(model.openai, localFilePath);
 
   } else {
 
-    const voice = ctx.message.voice;
-    await ctx.sendChatAction("typing");
-  
-    const localFilePath = await downloadVoiceFile(workDir, voice.file_id, bot);
-    const transcription = await postToWhisper(localFilePath);
-  
-    await ctx.reply(`Transcription: ${transcription}`);
-    await ctx.sendChatAction("typing");
-  
-    const response = await state.model.call(transcription, ctx,state.memory);
-  
-  
-    await ctx.reply(response);
+  let response;
+  try {
+    response = await model.call(transcription);
+  } catch (error) {
+    console.log(error);
+    await ctx.reply(
+      "Whoops! There was an error while talking to OpenAI. See logs for details."
+    );
+    return;
+  }
+
+  console.log(response);
+
+  await ctx.reply(response);
+
+  try {
     const responseTranscriptionPath = await textToSpeech(response);
-  
     await ctx.sendChatAction("typing");
-  
     await ctx.replyWithVoice({
       source: createReadStream(responseTranscriptionPath),
       filename: localFilePath,
     });
-  
+  } catch (error) {
+    console.log(error);
+    await ctx.reply(
+      "Whoops! There was an error while synthesizing the response via play.ht. See logs for details."
+    );
   }
-
-  
-  
 });
 
-const valid_ids = process.env.VALID_IDS || '';
-import { BufferMemory } from "langchain/memory";
+bot.on("message", async (ctx) => {
+  const text = (ctx.message as any).text;
 
-const chat_maps: any = {}
-const default_chat_context= function(id: any) {
-  console.log("CREATING NEW MODEL FOR CHAT ID ")
-  return {
-    model: new ChatWithTools()
+  if (!text) {
+    ctx.reply("Please send a text message.");
+    return;
   }
-}
 
-bot.on(message('text'), async (ctx) => {
+  console.log("Input: ", text);
 
+  await ctx.sendChatAction("typing");
+  try {
+    const response = await model.call(text);
 
-
-  if (valid_ids && !(valid_ids.includes(''+ctx.update.message.from.id))) {
-    const response = 'contact support for enabling this feature'  
-    console.log('ACCESS ATTEMPT BY '+ ctx.update.message.from.id)
     await ctx.reply(response);
-  } else {
-    if (!(('key_'+ctx.message.chat.id) in chat_maps)) {
-      chat_maps['key_'+ctx.message.chat.id] = default_chat_context(ctx.message.chat.id)
-    }
-    const state = chat_maps['key_'+ctx.message.chat.id]
-  
-    const text = (ctx.message as any).text;
+  } catch (error) {
+    console.log(error);
 
-    if (!text) {
-      ctx.reply("Please send a text message.");
-      return;
-    }
-  
-    
-    await ctx.sendChatAction("typing");
-    const response =  await state.model.call(text, ctx);
-    if (response) 
-      await ctx.reply(response);
-    else
-    await ctx.reply("Empty response from the model");
+    const message = JSON.stringify(
+      (error as any)?.response?.data?.error ?? "Unable to extract error"
+    );
+
+    console.log({ message });
+
+    await ctx.reply(
+      "Whoops! There was an error while talking to OpenAI. Error: " + message
+    );
   }
-
- 
 });
 
-bot.on(message('location'), (ctx) => {
-  /**return ctx.reply(
-    'Special buttons keyboard',
-    Markup.keyboard([
-      Markup.button.contactRequest('Send contact'),
-      Markup.button.locationRequest('Send location')
-    ]).resize()
-  ) */  ctx.editMessageReplyMarkup(undefined)
-  console.log(ctx.message.location.latitude);
-  console.log(ctx.message.location.longitude);
+bot.launch().then(() => {
+  console.log("Bot launched");
 });
 
-bot.launch();
-
-console.log("Bot started");
+process.on("SIGTERM", () => {
+  bot.stop();
+});
